@@ -1,0 +1,609 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                 String         @id @default(uuid())
+  email              String         @unique
+  password           String
+  firstName          String
+  lastName           String
+  phone              String?
+  dateOfBirth        DateTime?
+  gender             String?
+  cnic               String?
+  role               UserRole
+  isActive           Boolean        @default(true)
+  isApproved         Boolean        @default(false)
+  profileCompleted   Boolean        @default(false)
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  doctorAppointments Appointment[]  @relation("DoctorAppointments")
+  appointments       Appointment[]  @relation("PatientAppointments")
+  doctorProfile      Doctor?
+  notifications      Notification[]
+  nurseProfile       Nurse?
+  nursingNotes       NursingNote[]
+  patientQueues      PatientQueue[]
+  patientProfile     Patient?
+  prescriptions      Prescription[] @relation("DoctorPrescriptions")
+  createdTasks       Task[]         @relation("CreatedTasks")
+  assignedTasks      Task[]         @relation("AssignedTasks")
+
+  @@map("users")
+}
+
+model Doctor {
+  id             String               @id @default(uuid())
+  userId         String               @unique
+  specialization String?
+  licenseNumber  String?
+  departmentId   String?
+  department     String?
+  bio            String?
+  cvData         String?  @db.Text // Base64 encoded CV file
+  cvFileName     String?
+  cvFileType     String?
+  licenseImage   String?  @db.Text // Base64 encoded license image
+  appointmentFees Float?   @default(0)
+  salary         Float?   @default(0)
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  bedAssignments BedAssignment[]
+  availability   DoctorAvailability[]
+  shifts         DoctorShift[]
+  dept           Department?          @relation(fields: [departmentId], references: [id])
+  user           User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  visitNotes     VisitNote[]
+
+  @@map("doctors")
+}
+
+model Nurse {
+  id             String          @id @default(uuid())
+  userId         String          @unique
+  departmentId   String?
+  department     String?
+  licenseNumber  String?
+  cvData         String?
+  cvFileName     String?
+  cvFileType     String?
+  licenseImage   String?
+  salary         Float?          @default(0)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  bedAssignments BedAssignment[]
+  shifts         NurseShift[]
+  dept           Department?     @relation(fields: [departmentId], references: [id])
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("nurses")
+}
+
+model Patient {
+  id               String            @id @default(uuid())
+  userId           String            @unique
+  dateOfBirth      DateTime?
+  gender           String?
+  cnic             String?
+  address          String?
+  emergencyContact String?
+  emergencyPhone   String?
+  bloodGroup       String?
+  allergies        String?
+  medicalHistory   String?
+  currentState     PatientState      @default(WAITING)
+  departmentId     String?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  bedAssignments   BedAssignment[]
+  invoices         Invoice[]
+  labRecords       LabRecord[]
+  nursingNotes     NursingNote[]
+  patientQueues    PatientQueue[]
+  stateLogs        PatientStateLog[]
+  department       Department?       @relation(fields: [departmentId], references: [id])
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  prescriptions    Prescription[]
+  tasks            Task[]
+  visitNotes       VisitNote[]
+  vitals           Vitals[]
+
+  @@map("patients")
+}
+
+model Department {
+  id           String    @id @default(uuid())
+  name         String    @unique
+  description  String?
+  headDoctorId String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  doctors      Doctor[]
+  nurses       Nurse[]
+  patients     Patient[]
+  rooms        Room[]
+
+  @@map("departments")
+}
+
+model Room {
+  id               String                @id @default(uuid())
+  roomNumber       String                @unique
+  name             String?
+  type             String?
+  floor            String?
+  departmentId     String?
+  status           RoomStatus            @default(AVAILABLE)
+  capacity         Int                   @default(1)
+  notes            String?
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+  beds             Bed[]
+  housekeepingLogs RoomHousekeepingLog[]
+  department       Department?           @relation(fields: [departmentId], references: [id])
+
+  @@map("rooms")
+}
+
+model Bed {
+  id            String          @id @default(uuid())
+  roomId        String
+  label         String
+  status        BedStatus       @default(AVAILABLE)
+  lastCleanedAt DateTime?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  assignments   BedAssignment[]
+  room          Room            @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@unique([roomId, label])
+  @@map("beds")
+}
+
+model BedAssignment {
+  id         String              @id @default(uuid())
+  bedId      String
+  patientId  String
+  doctorId   String?
+  nurseId    String?
+  assignedAt DateTime            @default(now())
+  releasedAt DateTime?
+  status     BedAssignmentStatus @default(ACTIVE)
+  notes      String?
+  createdAt  DateTime            @default(now())
+  updatedAt  DateTime            @updatedAt
+  bed        Bed                 @relation(fields: [bedId], references: [id], onDelete: Cascade)
+  doctor     Doctor?             @relation(fields: [doctorId], references: [id])
+  nurse      Nurse?              @relation(fields: [nurseId], references: [id])
+  patient    Patient             @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@index([bedId])
+  @@index([patientId])
+  @@index([doctorId])
+  @@index([nurseId])
+  @@map("bed_assignments")
+}
+
+model RoomHousekeepingLog {
+  id          String    @id @default(uuid())
+  roomId      String
+  status      String
+  notes       String?
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  room        Room      @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@index([roomId])
+  @@map("room_housekeeping_logs")
+}
+
+model DoctorShift {
+  id        String   @id @default(uuid())
+  doctorId  String
+  dayOfWeek Int
+  startTime String
+  endTime   String
+  status    String   @default("ACTIVE")
+  location  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  doctor    Doctor   @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+
+  @@index([doctorId])
+  @@map("doctor_shifts")
+}
+
+model NurseShift {
+  id        String   @id @default(uuid())
+  nurseId   String
+  dayOfWeek Int
+  startTime String
+  endTime   String
+  ward      String?
+  status    String   @default("ACTIVE")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  nurse     Nurse    @relation(fields: [nurseId], references: [id], onDelete: Cascade)
+
+  @@index([nurseId])
+  @@map("nurse_shifts")
+}
+
+model PatientStateLog {
+  id        String        @id @default(uuid())
+  patientId String
+  fromState PatientState?
+  toState   PatientState
+  context   String?
+  createdAt DateTime      @default(now())
+  patient   Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@index([patientId])
+  @@map("patient_state_logs")
+}
+
+model Appointment {
+  id              String            @id @default(uuid())
+  patientId       String
+  doctorId        String
+  appointmentDate DateTime
+  appointmentTime String
+  status          AppointmentStatus @default(SCHEDULED)
+  reason          String?
+  notes           String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  doctor          User              @relation("DoctorAppointments", fields: [doctorId], references: [id], onDelete: Cascade)
+  patient         User              @relation("PatientAppointments", fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@map("appointments")
+}
+
+model DoctorAvailability {
+  id          String   @id @default(uuid())
+  doctorId    String
+  dayOfWeek   Int
+  startTime   String
+  endTime     String
+  isAvailable Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  doctor      Doctor   @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+
+  @@map("doctor_availability")
+}
+
+model VisitNote {
+  id             String       @id @default(uuid())
+  patientId      String
+  doctorId       String
+  appointmentId  String?
+  visitDate      DateTime     @default(now())
+  chiefComplaint String?
+  diagnosis      String?
+  treatmentPlan  String?
+  notes          String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  attachments    Attachment[]
+  doctor         Doctor       @relation(fields: [doctorId], references: [id])
+  patient        Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@map("visit_notes")
+}
+
+model Attachment {
+  id          String     @id @default(uuid())
+  visitNoteId String?
+  labRecordId String?
+  fileName    String
+  filePath    String
+  fileType    String?
+  fileSize    Int?
+  uploadedAt  DateTime   @default(now())
+  labRecord   LabRecord? @relation(fields: [labRecordId], references: [id], onDelete: Cascade)
+  visitNote   VisitNote? @relation(fields: [visitNoteId], references: [id], onDelete: Cascade)
+
+  @@map("attachments")
+}
+
+model LabRecord {
+  id          String       @id @default(uuid())
+  patientId   String
+  testName    String
+  testDate    DateTime     @default(now())
+  results     String?
+  status      String?
+  orderedBy   String?
+  notes       String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  attachments Attachment[]
+  patient     Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@map("lab_records")
+}
+
+model Prescription {
+  id             String    @id @default(uuid())
+  patientId      String
+  doctorId       String
+  appointmentId  String?
+  medications    Json
+  instructions   String?
+  prescribedDate DateTime  @default(now())
+  validUntil     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  doctor         User      @relation("DoctorPrescriptions", fields: [doctorId], references: [id])
+  patient        Patient   @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@map("prescriptions")
+}
+
+model Invoice {
+  id            String        @id @default(uuid())
+  patientId     String
+  invoiceNumber String        @unique
+  invoiceDate   DateTime      @default(now())
+  dueDate       DateTime?
+  status        InvoiceStatus @default(PENDING)
+  items         Json
+  subtotal      Decimal       @db.Decimal(10, 2)
+  tax           Decimal       @default(0) @db.Decimal(10, 2)
+  discount      Decimal       @default(0) @db.Decimal(10, 2)
+  total         Decimal       @db.Decimal(10, 2)
+  notes         String?
+  paidAt        DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  patient       Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@map("invoices")
+}
+
+model AuditLog {
+  id                String   @id @default(uuid())
+  userId            String?
+  userEmail         String?
+  action            String
+  entityType        String
+  entityId          String?
+  relatedEntityType String?
+  relatedEntityId   String?
+  description       String?
+  ipAddress         String?
+  userAgent         String?
+  changes           Json?
+  metadata          Json?
+  createdAt         DateTime @default(now())
+
+  @@index([userId])
+  @@index([entityType, entityId])
+  @@index([relatedEntityType, relatedEntityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model Vitals {
+  id               String   @id @default(uuid())
+  patientId        String
+  recordedBy       String
+  recordedAt       DateTime @default(now())
+  bloodPressure    String?
+  heartRate        Int?
+  temperature      Decimal? @db.Decimal(4, 1)
+  oxygenSaturation Decimal? @db.Decimal(5, 2)
+  weight           Decimal? @db.Decimal(5, 2)
+  height           Decimal? @db.Decimal(5, 2)
+  bmi              Decimal? @db.Decimal(4, 1)
+  notes            String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  patient          Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@index([patientId])
+  @@index([recordedAt])
+  @@map("vitals")
+}
+
+model NursingNote {
+  id            String   @id @default(uuid())
+  patientId     String
+  nurseId       String
+  noteDate      DateTime @default(now())
+  noteType      String?
+  content       String
+  observations  String?
+  interventions String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  nurse         User     @relation(fields: [nurseId], references: [id])
+  patient       Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@index([patientId])
+  @@index([nurseId])
+  @@index([noteDate])
+  @@map("nursing_notes")
+}
+
+model Task {
+  id                String    @id @default(uuid())
+  title             String
+  description       String?
+  assignedTo        String
+  assignedBy        String
+  priority          String    @default("MEDIUM")
+  status            String    @default("PENDING")
+  dueDate           DateTime?
+  completedAt       DateTime?
+  patientId         String?
+  relatedEntityType String?
+  relatedEntityId   String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  assigner          User      @relation("CreatedTasks", fields: [assignedBy], references: [id])
+  assignedUser      User      @relation("AssignedTasks", fields: [assignedTo], references: [id])
+  patient           Patient?  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@index([assignedTo])
+  @@index([status])
+  @@index([dueDate])
+  @@map("tasks")
+}
+
+model Notification {
+  id                String    @id @default(uuid())
+  userId            String
+  title             String
+  message           String
+  type              String
+  isRead            Boolean   @default(false)
+  readAt            DateTime?
+  actionUrl         String?
+  relatedEntityType String?
+  relatedEntityId   String?
+  createdAt         DateTime  @default(now())
+  user              User      @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([isRead])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+model PatientQueue {
+  id            String   @id @default(uuid())
+  patientId     String
+  appointmentId String?
+  checkedInAt   DateTime @default(now())
+  status        String   @default("WAITING")
+  priority      String   @default("NORMAL")
+  doctorId      String?
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  doctor        User?    @relation(fields: [doctorId], references: [id])
+  patient       Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([checkedInAt])
+  @@map("patient_queue")
+}
+
+enum WithdrawalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  COMPLETED
+}
+
+model SalaryWithdrawal {
+  id              String           @id @default(uuid())
+  employeeId      String           // Doctor.id or Nurse.id
+  employeeType    String           // "DOCTOR" or "NURSE"
+  amount          Float
+  status          WithdrawalStatus @default(PENDING)
+  requestedAt     DateTime         @default(now())
+  approvedAt      DateTime?
+  completedAt     DateTime?
+  rejectedAt       DateTime?
+  rejectionReason String?          @db.Text
+  notes           String?          @db.Text
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@index([employeeId, employeeType])
+  @@index([status])
+  @@map("salary_withdrawals")
+}
+
+model HospitalAccount {
+  id           String   @id @default(uuid())
+  balance      Float    @default(0)
+  totalRevenue Float    @default(0)
+  totalExpenses Float    @default(0)
+  lastUpdated  DateTime @default(now()) @updatedAt
+
+  @@map("hospital_account")
+}
+
+model Salary {
+  id                  String   @id @default(uuid())
+  employeeId          String   // Doctor.id or Nurse.id
+  employeeType        String   // "DOCTOR" or "NURSE"
+  periodStart         DateTime
+  periodEnd           DateTime
+  baseSalary          Float
+  appointmentEarnings Float   @default(0) // For doctors only
+  appointmentShares   Json?   // Array of appointment share details
+  totalSalary         Float
+  isDeleted           Boolean  @default(false)
+  deletedAt           DateTime?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([employeeId, employeeType])
+  @@index([isDeleted])
+  @@index([periodStart, periodEnd])
+  @@map("salaries")
+}
+
+enum UserRole {
+  ADMIN
+  DOCTOR
+  NURSE
+  PATIENT
+}
+
+enum AppointmentStatus {
+  SCHEDULED
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+  RESCHEDULED
+}
+
+enum InvoiceStatus {
+  PENDING
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum RoomStatus {
+  AVAILABLE
+  OCCUPIED
+  BOOKED
+  MAINTENANCE
+  CLEANING
+}
+
+enum BedStatus {
+  AVAILABLE
+  OCCUPIED
+  RESERVED
+  CLEANING
+  MAINTENANCE
+}
+
+enum BedAssignmentStatus {
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum PatientState {
+  WAITING
+  IN_APPOINTMENT
+  IN_OPERATION
+  IN_WARD
+  ADMITTED
+  DISCHARGED
+}

@@ -11,8 +11,8 @@ export class PatientsService {
     if (data.user) {
       const patientData = data.patient || {};
       return this.prisma.$transaction(async (tx) => {
-        // Check if user with this email already exists
-        const existingUser = await tx.user.findUnique({
+        // Check if user with this email already exists (use findFirst; email is no longer globally unique)
+        const existingUser = await tx.user.findFirst({
           where: { email: data.user.email?.trim() },
         });
 
@@ -42,13 +42,14 @@ export class PatientsService {
         }
 
         const hashedPassword = await bcrypt.hash(data.user.password, 10);
+        const phoneNormalized = data.user.phone ? String(data.user.phone).replace(/\D/g, '').trim() || null : null;
         const user = await tx.user.create({
           data: {
             email: data.user.email.trim(),
             password: hashedPassword,
             firstName: data.user.firstName.trim(),
             lastName: data.user.lastName.trim(),
-            phone: data.user.phone?.trim() || null,
+            phone: phoneNormalized,
             cnic: data.user.cnic?.trim() || null,
             role: UserRole.PATIENT,
             isApproved: true, // Walk-in patients are auto-approved
@@ -59,11 +60,14 @@ export class PatientsService {
         const cleanPatientData: any = {};
         if (patientData.gender) cleanPatientData.gender = patientData.gender;
         if (patientData.dateOfBirth) cleanPatientData.dateOfBirth = new Date(patientData.dateOfBirth);
+        if (patientData.cnic) cleanPatientData.cnic = patientData.cnic.trim() || null;
         if (patientData.bloodGroup) cleanPatientData.bloodGroup = patientData.bloodGroup.trim() || null;
         if (patientData.allergies) cleanPatientData.allergies = patientData.allergies.trim() || null;
         if (patientData.medicalHistory) cleanPatientData.medicalHistory = patientData.medicalHistory.trim() || null;
         cleanPatientData.currentState = patientData.currentState || 'IN_APPOINTMENT';
         if (patientData.departmentId) cleanPatientData.departmentId = patientData.departmentId;
+        // Sync from user when not in patient payload (e.g. walk-in sends cnic on user)
+        if (!cleanPatientData.cnic && data.user?.cnic) cleanPatientData.cnic = data.user.cnic.trim() || null;
 
         const patient = await tx.patient.create({
           data: {
@@ -105,20 +109,29 @@ export class PatientsService {
 
   async findAll(search?: string) {
     try {
+      const searchTrimmed = search?.trim()
+      const searchDigits = searchTrimmed?.replace(/\D/g, '') ?? ''
+      const orConditions: Prisma.UserWhereInput[] = []
+      if (searchTrimmed) {
+        orConditions.push(
+          { firstName: { contains: searchTrimmed, mode: Prisma.QueryMode.insensitive } },
+          { lastName: { contains: searchTrimmed, mode: Prisma.QueryMode.insensitive } },
+          { email: { contains: searchTrimmed, mode: Prisma.QueryMode.insensitive } },
+        )
+        if (searchDigits.length >= 5) {
+          const likePattern = `%${searchDigits}%`
+          const phoneUsers = await this.prisma.$queryRaw<{ id: string }[]>(
+            Prisma.sql`SELECT id FROM users WHERE phone IS NOT NULL AND REGEXP_REPLACE(phone, '[^0-9]', '', 'g') LIKE ${likePattern}`,
+          )
+          const phoneUserIds = phoneUsers.map((r) => r.id)
+          if (phoneUserIds.length > 0) {
+            orConditions.push({ id: { in: phoneUserIds } })
+          }
+        }
+      }
       const where: Prisma.PatientWhereInput = {
-        // Show all patients (admin can see all, including unapproved/inactive)
-        // For non-admin users, they should only see approved/active patients
-        // But since this is accessed via guards, admin/doctors/nurses can see all
         user: {
-          ...(search
-            ? {
-                OR: [
-                  { firstName: { contains: search, mode: Prisma.QueryMode.insensitive } },
-                  { lastName: { contains: search, mode: Prisma.QueryMode.insensitive } },
-                  { email: { contains: search, mode: Prisma.QueryMode.insensitive } },
-                ],
-              }
-            : {}),
+          ...(orConditions.length ? { OR: orConditions } : {}),
         },
       };
       return await this.prisma.patient.findMany({
@@ -131,6 +144,9 @@ export class PatientsService {
               firstName: true,
               lastName: true,
               phone: true,
+              gender: true,
+              cnic: true,
+              dateOfBirth: true,
               isApproved: true,
               isActive: true,
             },
@@ -155,6 +171,9 @@ export class PatientsService {
             firstName: true,
             lastName: true,
             phone: true,
+            gender: true,
+            cnic: true,
+            dateOfBirth: true,
           },
         },
         visitNotes: {
@@ -314,6 +333,9 @@ export class PatientsService {
             firstName: true,
             lastName: true,
             phone: true,
+            gender: true,
+            cnic: true,
+            dateOfBirth: true,
           },
         },
       },
@@ -401,9 +423,13 @@ export class PatientsService {
   }
 
   async update(id: string, data: any) {
+    const updateData = { ...data };
+    if (updateData.dateOfBirth !== undefined) {
+      updateData.dateOfBirth = updateData.dateOfBirth ? new Date(updateData.dateOfBirth) : null;
+    }
     return this.prisma.patient.update({
       where: { id },
-      data,
+      data: updateData,
       include: {
         user: {
           select: {
@@ -412,6 +438,9 @@ export class PatientsService {
             firstName: true,
             lastName: true,
             phone: true,
+            gender: true,
+            cnic: true,
+            dateOfBirth: true,
           },
         },
       },
@@ -434,6 +463,12 @@ export class PatientsService {
       // Delete patient first (this will cascade delete related records with onDelete: Cascade)
       await tx.patient.delete({
         where: { id },
+      });
+
+      // Notification and Task reference User without onDelete Cascade, so delete them first
+      await tx.notification.deleteMany({ where: { userId: patient.userId } });
+      await tx.task.deleteMany({
+        where: { OR: [{ assignedTo: patient.userId }, { assignedBy: patient.userId }] },
       });
 
       // Delete the associated user (this will cascade delete appointments and other user-related records)

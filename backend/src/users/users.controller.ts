@@ -61,6 +61,17 @@ export class UsersController {
     return this.usersService.findOne(req.user.id);
   }
 
+  @Get('by-phone')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get user by phone number (optional role)' })
+  async findByPhone(@Query('phone') phone: string, @Query('role') role?: UserRole) {
+    if (!phone?.trim()) throw new BadRequestException('Phone is required');
+    const user = await this.usersService.findByPhone(phone.trim(), role);
+    if (!user) throw new NotFoundException('User with this phone not found');
+    return user;
+  }
+
   @Get(':id')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()

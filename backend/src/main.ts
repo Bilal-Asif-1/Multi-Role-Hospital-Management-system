@@ -1,5 +1,5 @@
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
+import { ValidationPipe, HttpException, HttpStatus } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { json, urlencoded } from 'express';
@@ -49,6 +49,22 @@ async function bootstrap() {
       whitelist: true,
       forbidNonWhitelisted: true,
       transform: true,
+      transformOptions: {
+        enableImplicitConversion: true,
+      },
+      exceptionFactory: (errors) => {
+        const messages = errors.map(error => {
+          return Object.values(error.constraints || {}).join(', ');
+        });
+        return new HttpException(
+          {
+            statusCode: 400,
+            message: messages.length > 0 ? messages : ['Validation failed'],
+            error: 'Bad Request',
+          },
+          HttpStatus.BAD_REQUEST,
+        );
+      },
     }),
   );
 

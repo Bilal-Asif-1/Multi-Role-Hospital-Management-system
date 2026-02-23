@@ -9,6 +9,7 @@ import {
   Query,
   UseGuards,
   Request,
+  ForbiddenException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { PrescriptionsService } from './prescriptions.service';
@@ -72,9 +73,17 @@ export class PrescriptionsController {
 
   @Delete(':id')
   @UseGuards(RolesGuard)
-  @Roles(UserRole.ADMIN, UserRole.DOCTOR)
+  @Roles(UserRole.ADMIN, UserRole.DOCTOR, UserRole.PATIENT)
   @ApiOperation({ summary: 'Delete prescription' })
-  remove(@Param('id') id: string) {
+  async remove(@Param('id') id: string, @Request() req: any) {
+    if (req.user.role === UserRole.PATIENT) {
+      const patient = await this.prescriptionsService.findPatientByUserId(req.user.id);
+      if (!patient) throw new ForbiddenException('Patient profile not found');
+      const prescription = await this.prescriptionsService.findOne(id);
+      if (!prescription || prescription.patientId !== patient.id) {
+        throw new ForbiddenException('You can only delete your own prescriptions');
+      }
+    }
     return this.prescriptionsService.remove(id);
   }
 }

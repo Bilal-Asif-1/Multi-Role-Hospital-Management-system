@@ -4,9 +4,17 @@ import { useAuth } from '../contexts/AuthContext'
 import toast from 'react-hot-toast'
 import { CheckCircle } from 'lucide-react'
 
+const LOGIN_ROLES = [
+  { value: 'PATIENT', label: 'Patient' },
+  { value: 'DOCTOR', label: 'Doctor' },
+  { value: 'NURSE', label: 'Nurse' },
+  { value: 'ADMIN', label: 'Admin' },
+] as const
+
 export default function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [role, setRole] = useState<string>('PATIENT')
   const [loading, setLoading] = useState(false)
   const { login, user, loading: authLoading } = useAuth()
   const navigate = useNavigate()
@@ -101,24 +109,20 @@ export default function Login() {
     e.preventDefault()
     setLoading(true)
     try {
-      await login(email, password)
-      toast.success('Login successful!')
-      
-      // Get user from auth context after login
+      await login(email, password, role)
       const userData = JSON.parse(localStorage.getItem('user') || '{}')
-      
+      toast.success('Login successful!')
+
       // Check if user needs to complete profile or is pending approval
       if (userData.role !== 'ADMIN' && userData.isApproved === false) {
-        // If profile not completed, redirect to settings to fill profile
         if (userData.profileCompleted === false) {
           navigate('/settings')
           return
         }
-        // If profile completed but not approved, show pending approval page
         navigate('/pending-approval')
         return
       }
-      
+
       // Redirect based on role
       if (userData.role === 'ADMIN') {
         navigate('/admin')
@@ -166,6 +170,23 @@ export default function Login() {
           )}
           <form className="space-y-6" onSubmit={handleSubmit}>
             <div>
+              <label htmlFor="role" className="block text-sm font-medium text-black mb-2 font-bold">
+                Login as
+              </label>
+              <select
+                id="role"
+                value={role}
+                onChange={(e) => setRole(e.target.value)}
+                className="appearance-none relative block w-full px-4 py-3 border-2 border-gray-300 text-black rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-black sm:text-sm transition-all bg-white"
+              >
+                {LOGIN_ROLES.map((r) => (
+                  <option key={r.value} value={r.value}>
+                    {r.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
               <label htmlFor="email" className="block text-sm font-medium text-black mb-2 font-bold">
                 Email address
               </label>
@@ -182,9 +203,17 @@ export default function Login() {
               />
             </div>
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-black mb-2 font-bold">
-                Password
-              </label>
+              <div className="flex items-center justify-between mb-2">
+                <label htmlFor="password" className="block text-sm font-medium text-black font-bold">
+                  Password
+                </label>
+                <Link
+                  to="/forgot-password"
+                  className="text-sm font-medium text-gray-600 hover:text-black"
+                >
+                  Forgot password?
+                </Link>
+              </div>
               <input
                 id="password"
                 name="password"

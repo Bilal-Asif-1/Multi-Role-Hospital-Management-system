@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AppointmentStatus, InvoiceStatus } from '@prisma/client';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -16,7 +16,58 @@ export class AppointmentsService {
       ...data,
       appointmentDate: data.appointmentDate ? new Date(data.appointmentDate) : new Date(),
     };
-    
+
+    // Normalize time to "HH:mm" so "9:00" and "09:00" compare equal
+    const normalizeTime = (t: string) => {
+      if (!t || !t.trim()) return '';
+      const parts = String(t).trim().split(':');
+      const h = parts[0] ? parts[0].padStart(2, '0') : '00';
+      const m = parts[1] ? parts[1].padStart(2, '0') : '00';
+      return `${h}:${m}`;
+    };
+    const requestedTime = normalizeTime(appointmentData.appointmentTime || '');
+
+    // Prevent double-booking: same patient cannot have another appointment at the same date and time
+    const reqDate = new Date(appointmentData.appointmentDate);
+    const startOfDay = new Date(reqDate);
+    startOfDay.setUTCHours(0, 0, 0, 0);
+    const endOfDay = new Date(reqDate);
+    endOfDay.setUTCHours(23, 59, 59, 999);
+    const existingPatientAppointments = await this.prisma.appointment.findMany({
+      where: {
+        patientId: appointmentData.patientId,
+        appointmentDate: { gte: startOfDay, lte: endOfDay },
+        status: { not: AppointmentStatus.CANCELLED },
+      },
+      select: { appointmentTime: true },
+    });
+    const samePatientSlot = existingPatientAppointments.some(
+      (apt) => normalizeTime(apt.appointmentTime || '') === requestedTime,
+    );
+    if (samePatientSlot) {
+      throw new ConflictException(
+        'You already have an appointment at this slot.',
+      );
+    }
+
+    // Prevent doctor double-booking: same doctor cannot have two appointments at the same date and time
+    const existingDoctorAppointments = await this.prisma.appointment.findMany({
+      where: {
+        doctorId: appointmentData.doctorId,
+        appointmentDate: { gte: startOfDay, lte: endOfDay },
+        status: { not: AppointmentStatus.CANCELLED },
+      },
+      select: { appointmentTime: true },
+    });
+    const sameDoctorSlot = existingDoctorAppointments.some(
+      (apt) => normalizeTime(apt.appointmentTime || '') === requestedTime,
+    );
+    if (sameDoctorSlot) {
+      throw new ConflictException(
+        'This slot is already booked with this doctor. Please choose a different date or time.',
+      );
+    }
+
     // Get doctor details to check for appointment fees
     const doctor = await this.prisma.doctor.findUnique({
       where: { userId: appointmentData.doctorId },

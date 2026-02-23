@@ -6,9 +6,9 @@ const prisma = new PrismaClient();
 async function main() {
   console.log('🌱 Seeding database...');
 
-  // Check if admin already exists
+  // Check if admin already exists (unique is email+role)
   const existingAdmin = await prisma.user.findUnique({
-    where: { email: 'admin@ihis.com' },
+    where: { email_role: { email: 'admin@ihis.com', role: UserRole.ADMIN } },
   });
 
   if (existingAdmin) {

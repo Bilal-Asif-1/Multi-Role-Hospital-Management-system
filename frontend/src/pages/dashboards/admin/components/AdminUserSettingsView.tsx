@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { doctorsApi, nursesApi, patientsApi, shiftsApi } from '../../../../services/api'
-import { Settings, User, Calendar, Clock, Building, Award, FileText, X, Download, Eye } from 'lucide-react'
+import { Settings, User, Calendar, Clock, Building, Award, FileText, X, Download, Eye, History, FlaskConical, Pill } from 'lucide-react'
 import { format } from 'date-fns'
 import { useState, useEffect } from 'react'
 
@@ -94,6 +94,13 @@ export function AdminUserSettingsView({
       return Promise.resolve([])
     },
     enabled: !!userId && (userType === 'doctor' || userType === 'nurse'),
+  })
+
+  const patientId = userType === 'patient' && settings?.profile ? (settings.profile as any).id : null
+  const { data: patientOverview } = useQuery({
+    queryKey: ['patient-overview', patientId],
+    queryFn: () => patientsApi.getOverview(patientId as string),
+    enabled: !!patientId,
   })
 
   if (isLoading) {
@@ -195,30 +202,26 @@ export function AdminUserSettingsView({
                 <p className="text-sm font-bold text-gray-600">Phone</p>
                 <p className="text-black font-bold">{user?.phone || 'N/A'}</p>
               </div>
-              {user?.dateOfBirth && (
-                <div>
-                  <p className="text-sm font-bold text-gray-600">Date of Birth</p>
-                  <p className="text-black font-bold">
-                    {format(new Date(user.dateOfBirth), 'MMM dd, yyyy')}
-                  </p>
-                </div>
-              )}
-              {user?.gender && (
-                <div>
-                  <p className="text-sm font-bold text-gray-600">Gender</p>
-                  <p className="text-black font-bold">{user.gender}</p>
-                </div>
-              )}
-              {user?.cnic && (
-                <div>
-                  <p className="text-sm font-bold text-gray-600">CNIC</p>
-                  <p className="text-black font-bold">{user.cnic}</p>
-                </div>
-              )}
-              {user?.address && (
+              <div>
+                <p className="text-sm font-bold text-gray-600">Date of Birth</p>
+                <p className="text-black font-bold">
+                  {(user?.dateOfBirth || (userType === 'patient' && (profile as any)?.dateOfBirth))
+                    ? format(new Date((user?.dateOfBirth || (profile as any)?.dateOfBirth) as string), 'MMM dd, yyyy')
+                    : 'N/A'}
+                </p>
+              </div>
+              <div>
+                <p className="text-sm font-bold text-gray-600">Gender</p>
+                <p className="text-black font-bold">{user?.gender || (userType === 'patient' && (profile as any)?.gender) || 'N/A'}</p>
+              </div>
+              <div>
+                <p className="text-sm font-bold text-gray-600">CNIC</p>
+                <p className="text-black font-bold">{user?.cnic || (userType === 'patient' && (profile as any)?.cnic) || 'N/A'}</p>
+              </div>
+              {(user?.address || (userType === 'patient' && (profile as any)?.address)) && (
                 <div className="col-span-2">
                   <p className="text-sm font-bold text-gray-600">Address</p>
-                  <p className="text-black font-bold">{user.address}</p>
+                  <p className="text-black font-bold">{user?.address || (profile as any)?.address}</p>
                 </div>
               )}
             </div>
@@ -462,44 +465,137 @@ export function AdminUserSettingsView({
                   <FileText className="h-5 w-5 mr-2" /> Medical Information
                 </h3>
                 <div className="grid grid-cols-2 gap-4">
-                  {profile?.bloodGroup && (
-                    <div>
-                      <p className="text-sm font-bold text-gray-600">Blood Group</p>
-                      <p className="text-black font-bold">{profile.bloodGroup}</p>
-                    </div>
-                  )}
-                  {profile?.allergies && (
-                    <div>
-                      <p className="text-sm font-bold text-gray-600">Allergies</p>
-                      <p className="text-black font-bold">{profile.allergies}</p>
-                    </div>
-                  )}
-                  {profile?.emergencyContact && (
-                    <div>
-                      <p className="text-sm font-bold text-gray-600">Emergency Contact</p>
-                      <p className="text-black font-bold">{profile.emergencyContact}</p>
-                    </div>
-                  )}
-                  {profile?.emergencyPhone && (
-                    <div>
-                      <p className="text-sm font-bold text-gray-600">Emergency Phone</p>
-                      <p className="text-black font-bold">{profile.emergencyPhone}</p>
-                    </div>
-                  )}
-                  {profile?.currentState && (
-                    <div>
-                      <p className="text-sm font-bold text-gray-600">Current State</p>
-                      <p className="text-black font-bold">{profile.currentState}</p>
-                    </div>
-                  )}
-                  {profile?.medicalHistory && (
-                    <div className="col-span-2">
-                      <p className="text-sm font-bold text-gray-600">Medical History</p>
-                      <p className="text-black">{profile.medicalHistory}</p>
-                    </div>
-                  )}
+                  <div>
+                    <p className="text-sm font-bold text-gray-600">Blood Group</p>
+                    <p className="text-black font-bold">{profile?.bloodGroup || '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-gray-600">Allergies</p>
+                    <p className="text-black font-bold">{profile?.allergies || '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-gray-600">Emergency Contact</p>
+                    <p className="text-black font-bold">{profile?.emergencyContact || '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-gray-600">Emergency Phone</p>
+                    <p className="text-black font-bold">{profile?.emergencyPhone || '—'}</p>
+                  </div>
+                  <div className="col-span-2">
+                    <p className="text-sm font-bold text-gray-600">Medical History</p>
+                    <p className="text-black whitespace-pre-wrap">{profile?.medicalHistory || '—'}</p>
+                  </div>
                 </div>
               </section>
+
+              {/* Visit Notes (Past clinical notes) */}
+              {(profile as any)?.visitNotes?.length > 0 && (
+                <section className="bg-gray-50 rounded-lg p-4">
+                  <h3 className="text-lg font-bold text-black mb-4 flex items-center">
+                    <History className="h-5 w-5 mr-2" /> Visit Notes (Past History)
+                  </h3>
+                  <div className="space-y-3 max-h-64 overflow-y-auto">
+                    {(profile as any).visitNotes.map((note: any) => (
+                      <div key={note.id} className="bg-white p-3 rounded-md border border-gray-200">
+                        <p className="text-xs text-gray-500">
+                          {format(new Date(note.visitDate), 'MMM dd, yyyy')}
+                          {note.doctor?.user && (
+                            <span className="ml-2">
+                              • Dr. {note.doctor.user.firstName} {note.doctor.user.lastName}
+                            </span>
+                          )}
+                        </p>
+                        {note.chiefComplaint && <p className="text-sm mt-1"><span className="font-bold text-gray-600">Chief complaint:</span> {note.chiefComplaint}</p>}
+                        {note.diagnosis && <p className="text-sm mt-1"><span className="font-bold text-gray-600">Diagnosis:</span> {note.diagnosis}</p>}
+                        {note.treatmentPlan && <p className="text-sm mt-1"><span className="font-bold text-gray-600">Treatment:</span> {note.treatmentPlan}</p>}
+                        {note.notes && <p className="text-sm mt-1 text-gray-700">{note.notes}</p>}
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {/* Lab Records */}
+              {(profile as any)?.labRecords?.length > 0 && (
+                <section className="bg-gray-50 rounded-lg p-4">
+                  <h3 className="text-lg font-bold text-black mb-4 flex items-center">
+                    <FlaskConical className="h-5 w-5 mr-2" /> Lab Records
+                  </h3>
+                  <div className="space-y-2 max-h-48 overflow-y-auto">
+                    {(profile as any).labRecords.map((lab: any) => (
+                      <div key={lab.id} className="bg-white p-3 rounded-md border border-gray-200 flex justify-between items-start">
+                        <div>
+                          <p className="text-black font-bold">{lab.testName}</p>
+                          <p className="text-xs text-gray-500">{format(new Date(lab.testDate), 'MMM dd, yyyy')}</p>
+                          {lab.results && <p className="text-sm mt-1 text-gray-700">{lab.results}</p>}
+                          {lab.status && <p className="text-xs mt-1">Status: {lab.status}</p>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {/* Prescriptions */}
+              {(profile as any)?.prescriptions?.length > 0 && (
+                <section className="bg-gray-50 rounded-lg p-4">
+                  <h3 className="text-lg font-bold text-black mb-4 flex items-center">
+                    <Pill className="h-5 w-5 mr-2" /> Prescriptions
+                  </h3>
+                  <div className="space-y-2 max-h-48 overflow-y-auto">
+                    {(profile as any).prescriptions.map((rx: any) => (
+                      <div key={rx.id} className="bg-white p-3 rounded-md border border-gray-200">
+                        <p className="text-xs text-gray-500">
+                          {format(new Date(rx.prescribedDate), 'MMM dd, yyyy')}
+                          {rx.doctor && (
+                            <span className="ml-2">• Dr. {rx.doctor.firstName} {rx.doctor.lastName}</span>
+                          )}
+                        </p>
+                        <p className="text-sm mt-1 text-black font-bold">Medications</p>
+                        <pre className="text-sm text-gray-700 whitespace-pre-wrap font-sans">{typeof rx.medications === 'object' ? JSON.stringify(rx.medications, null, 2) : rx.medications}</pre>
+                        {rx.instructions && <p className="text-sm mt-1"><span className="font-bold text-gray-600">Instructions:</span> {rx.instructions}</p>}
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {/* Appointments (from overview) */}
+              {patientOverview?.appointments?.length > 0 && (
+                <section className="bg-gray-50 rounded-lg p-4">
+                  <h3 className="text-lg font-bold text-black mb-4 flex items-center">
+                    <Calendar className="h-5 w-5 mr-2" /> Appointments History
+                  </h3>
+                  <div className="space-y-2 max-h-48 overflow-y-auto">
+                    {patientOverview.appointments.map((apt: any) => (
+                      <div key={apt.id} className="bg-white p-3 rounded-md border border-gray-200 flex justify-between items-center">
+                        <div>
+                          <p className="text-black font-bold">{format(new Date(apt.appointmentDate), 'MMM dd, yyyy')} at {apt.appointmentTime}</p>
+                          <p className="text-xs text-gray-500">Status: {apt.status}</p>
+                          {apt.doctor && <p className="text-xs">Dr. {apt.doctor.firstName} {apt.doctor.lastName}</p>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {/* State History (from overview) */}
+              {patientOverview?.stateLogs?.length > 0 && (
+                <section className="bg-gray-50 rounded-lg p-4">
+                  <h3 className="text-lg font-bold text-black mb-4 flex items-center">
+                    <History className="h-5 w-5 mr-2" /> State History
+                  </h3>
+                  <div className="space-y-1 max-h-40 overflow-y-auto">
+                    {patientOverview.stateLogs.map((log: any, idx: number) => (
+                      <div key={log.id || idx} className="bg-white px-3 py-2 rounded border border-gray-200 flex items-center gap-2 text-sm">
+                        <span className="text-gray-500">{format(new Date(log.createdAt), 'MMM dd, HH:mm')}</span>
+                        <span>{log.fromState || '—'} → <strong>{log.toState}</strong></span>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
             </>
           )}
         </div>

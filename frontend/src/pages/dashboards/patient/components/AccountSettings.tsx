@@ -55,16 +55,15 @@ export default function AccountSettings() {
   // Update form data when patient profile loads
   useEffect(() => {
     if (patientProfile) {
+      const dob = patientProfile.dateOfBirth || patientProfile.user?.dateOfBirth
       setFormData((prev) => ({
         firstName: patientProfile.user?.firstName || user?.firstName || '',
         lastName: patientProfile.user?.lastName || user?.lastName || '',
         phone: patientProfile.user?.phone || '',
         email: patientProfile.user?.email || user?.email || '',
-        dateOfBirth: patientProfile.dateOfBirth
-          ? format(new Date(patientProfile.dateOfBirth), 'yyyy-MM-dd')
-          : '',
-        gender: patientProfile.gender || '',
-        cnic: patientProfile.cnic || '',
+        dateOfBirth: dob ? format(new Date(dob), 'yyyy-MM-dd') : '',
+        gender: patientProfile.gender || patientProfile.user?.gender || '',
+        cnic: patientProfile.cnic || patientProfile.user?.cnic || '',
         address: patientProfile.address || '',
         bloodGroup: patientProfile.bloodGroup || '',
         allergies: patientProfile.allergies || '',

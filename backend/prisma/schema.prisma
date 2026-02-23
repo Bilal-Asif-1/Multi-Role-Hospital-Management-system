@@ -9,7 +9,7 @@ datasource db {
 
 model User {
   id                 String         @id @default(uuid())
-  email              String         @unique
+  email              String
   password           String
   firstName          String
   lastName           String
@@ -35,31 +35,33 @@ model User {
   createdTasks       Task[]         @relation("CreatedTasks")
   assignedTasks      Task[]         @relation("AssignedTasks")
 
+  @@unique([email, role])
+  @@unique([phone, role])
   @@map("users")
 }
 
 model Doctor {
-  id             String               @id @default(uuid())
-  userId         String               @unique
-  specialization String?
-  licenseNumber  String?
-  departmentId   String?
-  department     String?
-  bio            String?
-  cvData         String?  @db.Text // Base64 encoded CV file
-  cvFileName     String?
-  cvFileType     String?
-  licenseImage   String?  @db.Text // Base64 encoded license image
-  appointmentFees Float?   @default(0)
-  salary         Float?   @default(0)
-  createdAt      DateTime             @default(now())
-  updatedAt      DateTime             @updatedAt
-  bedAssignments BedAssignment[]
-  availability   DoctorAvailability[]
-  shifts         DoctorShift[]
-  dept           Department?          @relation(fields: [departmentId], references: [id])
-  user           User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
-  visitNotes     VisitNote[]
+  id              String               @id @default(uuid())
+  userId          String               @unique
+  specialization  String?
+  licenseNumber   String?
+  departmentId    String?
+  department      String?
+  bio             String?
+  cvData          String?              @db.Text // Base64 encoded CV file
+  cvFileName      String?
+  cvFileType      String?
+  licenseImage    String?              @db.Text // Base64 encoded license image
+  appointmentFees Float?               @default(0)
+  salary          Float?               @default(0)
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  bedAssignments  BedAssignment[]
+  availability    DoctorAvailability[]
+  shifts          DoctorShift[]
+  dept            Department?          @relation(fields: [departmentId], references: [id])
+  user            User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  visitNotes      VisitNote[]
 
   @@map("doctors")
 }
@@ -506,14 +508,14 @@ enum WithdrawalStatus {
 
 model SalaryWithdrawal {
   id              String           @id @default(uuid())
-  employeeId      String           // Doctor.id or Nurse.id
-  employeeType    String           // "DOCTOR" or "NURSE"
+  employeeId      String // Doctor.id or Nurse.id
+  employeeType    String // "DOCTOR" or "NURSE"
   amount          Float
   status          WithdrawalStatus @default(PENDING)
   requestedAt     DateTime         @default(now())
   approvedAt      DateTime?
   completedAt     DateTime?
-  rejectedAt       DateTime?
+  rejectedAt      DateTime?
   rejectionReason String?          @db.Text
   notes           String?          @db.Text
   createdAt       DateTime         @default(now())
@@ -525,29 +527,29 @@ model SalaryWithdrawal {
 }
 
 model HospitalAccount {
-  id           String   @id @default(uuid())
-  balance      Float    @default(0)
-  totalRevenue Float    @default(0)
+  id            String   @id @default(uuid())
+  balance       Float    @default(0)
+  totalRevenue  Float    @default(0)
   totalExpenses Float    @default(0)
-  lastUpdated  DateTime @default(now()) @updatedAt
+  lastUpdated   DateTime @default(now()) @updatedAt
 
   @@map("hospital_account")
 }
 
 model Salary {
-  id                  String   @id @default(uuid())
-  employeeId          String   // Doctor.id or Nurse.id
-  employeeType        String   // "DOCTOR" or "NURSE"
+  id                  String    @id @default(uuid())
+  employeeId          String // Doctor.id or Nurse.id
+  employeeType        String // "DOCTOR" or "NURSE"
   periodStart         DateTime
   periodEnd           DateTime
   baseSalary          Float
-  appointmentEarnings Float   @default(0) // For doctors only
-  appointmentShares   Json?   // Array of appointment share details
+  appointmentEarnings Float     @default(0) // For doctors only
+  appointmentShares   Json? // Array of appointment share details
   totalSalary         Float
-  isDeleted           Boolean  @default(false)
+  isDeleted           Boolean   @default(false)
   deletedAt           DateTime?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   @@index([employeeId, employeeType])
   @@index([isDeleted])

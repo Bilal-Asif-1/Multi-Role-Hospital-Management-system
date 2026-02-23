@@ -18,7 +18,7 @@ export class UsersService {
           password: data.password,
           firstName: data.firstName,
           lastName: data.lastName,
-          phone: data.phone,
+          phone: this.normalizePhone(data.phone) ?? data.phone ?? null,
           role: data.role,
           cnic: data.cnic || null,
           dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth) : null,
@@ -53,6 +53,7 @@ export class UsersService {
               userId: user.id,
               dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth) : null,
               gender: data.gender || null,
+              cnic: data.cnic || null,
               address: data.address || null,
             },
           });
@@ -150,8 +151,48 @@ export class UsersService {
   }
 
   async findByEmail(email: string) {
-    return this.prisma.user.findUnique({
+    return this.prisma.user.findFirst({
       where: { email },
+      include: {
+        doctorProfile: true,
+        nurseProfile: true,
+        patientProfile: true,
+      },
+    });
+  }
+
+  async findByEmailAndRole(email: string, role: string) {
+    return this.prisma.user.findUnique({
+      where: {
+        email_role: { email, role: role as any },
+      },
+      include: {
+        doctorProfile: true,
+        nurseProfile: true,
+        patientProfile: true,
+      },
+    });
+  }
+
+  /** Normalize phone to digits only for consistent lookup (e.g. +92 300 1234567 → 923001234567) */
+  private normalizePhone(phone: string | null | undefined): string | null {
+    if (phone == null || String(phone).trim() === '') return null;
+    const digits = String(phone).replace(/\D/g, '');
+    return digits.length > 0 ? digits : null;
+  }
+
+  /**
+   * Find user by phone (and optionally role). Phone is matched after normalizing to digits only.
+   * Uses unique (phone, role) when role is provided and phone is present.
+   */
+  async findByPhone(phone: string, role?: UserRole) {
+    const normalized = this.normalizePhone(phone);
+    if (!normalized) return null;
+    return this.prisma.user.findFirst({
+      where: {
+        phone: normalized,
+        ...(role && { role: role as any }),
+      },
       include: {
         doctorProfile: true,
         nurseProfile: true,
@@ -181,6 +222,9 @@ export class UsersService {
       const updateData = { ...data };
       if (updateData.dateOfBirth !== undefined) {
         updateData.dateOfBirth = updateData.dateOfBirth ? new Date(updateData.dateOfBirth) : null;
+      }
+      if (updateData.phone !== undefined) {
+        updateData.phone = this.normalizePhone(updateData.phone) ?? updateData.phone ?? null;
       }
       
       return await this.prisma.user.update({

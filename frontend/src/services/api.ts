@@ -129,9 +129,35 @@ export interface PatientStateLog {
 }
 
 export const authApi = {
-  login: async (email: string, password: string) => {
+  login: async (email: string, password: string, role: string) => {
     try {
-      const { data } = await api.post('/auth/login', { email, password })
+      const { data } = await api.post('/auth/login', { email, password, role })
+      return data
+    } catch (error: any) {
+      if (error.code === 'ERR_NETWORK' || error.message?.includes('ERR_CONNECTION_REFUSED')) {
+        throw new Error('Cannot connect to server. Please make sure the backend server is running.')
+      }
+      throw error
+    }
+  },
+  sendOtp: async (email: string) => {
+    try {
+      const { data } = await api.post('/auth/send-otp', { email })
+      return data
+    } catch (error: any) {
+      if (error.code === 'ERR_NETWORK' || error.message?.includes('ERR_CONNECTION_REFUSED')) {
+        throw new Error('Cannot connect to server. Please make sure the backend server is running.')
+      }
+      throw error
+    }
+  },
+  verifyOtp: async (email: string, otp: string) => {
+    try {
+      const normalizedOtp = String(otp ?? '').replace(/\D/g, '').slice(0, 6)
+      const { data } = await api.post('/auth/verify-otp', {
+        email: email?.trim() ?? '',
+        otp: normalizedOtp,
+      })
       return data
     } catch (error: any) {
       if (error.code === 'ERR_NETWORK' || error.message?.includes('ERR_CONNECTION_REFUSED')) {
@@ -153,6 +179,14 @@ export const authApi = {
   },
   getProfile: async () => {
     const { data } = await api.get('/auth/profile')
+    return data
+  },
+  forgotPassword: async (email: string) => {
+    const { data } = await api.post('/auth/forgot-password', { email })
+    return data
+  },
+  resetPassword: async (email: string, otp: string, newPassword: string) => {
+    const { data } = await api.post('/auth/reset-password', { email, otp, newPassword })
     return data
   },
 }

@@ -1,4 +1,4 @@
-import { FileText, Calendar, Stethoscope, Heart, AlertCircle, Shield, User, Clock } from 'lucide-react'
+import { FileText, Calendar, Stethoscope, Heart, AlertCircle, User, Clock } from 'lucide-react'
 import { format } from 'date-fns'
 
 interface MedicalRecordsProps {
@@ -43,49 +43,25 @@ export default function MedicalRecords({ visitNotes, patient }: MedicalRecordsPr
         </div>
       </div>
 
-      {/* Allergies & Immunizations */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Allergies Card */}
-        <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-200">
-          <div className="flex items-center space-x-3 mb-4">
-            <div className="bg-black rounded-lg p-3">
-              <AlertCircle className="h-6 w-6 text-white" />
-            </div>
-            <h3 className="text-lg font-bold text-black">Allergies</h3>
+      {/* Allergies */}
+      <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-200">
+        <div className="flex items-center space-x-3 mb-4">
+          <div className="bg-black rounded-lg p-3">
+            <AlertCircle className="h-6 w-6 text-white" />
           </div>
-          {patient?.allergies ? (
-            <div className="bg-red-50 rounded-lg p-4 border border-red-100">
-              <p className="text-black font-bold">{patient.allergies}</p>
-            </div>
-          ) : (
-            <div className="bg-gray-50 rounded-lg p-6 text-center border border-gray-200">
-              <AlertCircle className="h-12 w-12 text-black mx-auto mb-2" />
-              <p className="text-black font-bold">No known allergies</p>
-              <p className="text-sm text-black mt-1">No allergies have been recorded</p>
-            </div>
-          )}
+          <h3 className="text-lg font-bold text-black">Allergies</h3>
         </div>
-
-        {/* Immunizations Card */}
-        <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-200">
-          <div className="flex items-center space-x-3 mb-4">
-            <div className="bg-black rounded-lg p-3">
-              <Shield className="h-6 w-6 text-white" />
-            </div>
-            <h3 className="text-lg font-bold text-black">Immunizations</h3>
+        {patient?.allergies ? (
+          <div className="bg-red-50 rounded-lg p-4 border border-red-100">
+            <p className="text-black font-bold">{patient.allergies}</p>
           </div>
-          {patient?.immunizations ? (
-            <div className="bg-green-50 rounded-lg p-4 border border-green-100">
-              <p className="text-black font-bold whitespace-pre-line">{patient.immunizations}</p>
-            </div>
-          ) : (
-            <div className="bg-gray-50 rounded-lg p-6 text-center border border-gray-200">
-              <Shield className="h-12 w-12 text-black mx-auto mb-2" />
-              <p className="text-black font-bold">No immunization records</p>
-              <p className="text-sm text-black mt-1">Contact your healthcare provider to update records</p>
-            </div>
-          )}
-        </div>
+        ) : (
+          <div className="bg-gray-50 rounded-lg p-6 text-center border border-gray-200">
+            <AlertCircle className="h-12 w-12 text-black mx-auto mb-2" />
+            <p className="text-black font-bold">No known allergies</p>
+            <p className="text-sm text-black mt-1">No allergies have been recorded</p>
+          </div>
+        )}
       </div>
 
       {/* Treatment History */}

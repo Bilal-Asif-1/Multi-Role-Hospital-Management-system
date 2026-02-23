@@ -4,6 +4,7 @@ import { Toaster } from 'react-hot-toast'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import Login from './pages/Login'
 import Register from './pages/Register'
+import ForgotPassword from './pages/ForgotPassword'
 import AdminDashboard from './pages/dashboards/AdminDashboard'
 import DoctorDashboard from './pages/dashboards/DoctorDashboard'
 import NurseDashboard from './pages/dashboards/NurseDashboard'
@@ -45,6 +46,7 @@ function AppRoutes() {
       <Route path="/faqs" element={<FAQsPage />} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/pending-approval" element={<PendingApprovalPage />} />
       <Route
         path="/settings"

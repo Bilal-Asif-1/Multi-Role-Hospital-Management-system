@@ -361,8 +361,21 @@ export default function AppointmentsPage() {
         }
       }
     })
-    
-    return slots.sort()
+
+    // When selected date is today, only show slots in the future
+    const now = new Date()
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+    const selectedDateStr = formState.appointmentDate || ''
+    const isToday = selectedDateStr === todayStr
+    const currentMins = now.getHours() * 60 + now.getMinutes()
+    const filtered = isToday
+      ? slots.filter((slot) => {
+          const [h, m] = slot.split(':').map(Number)
+          return h * 60 + m > currentMins
+        })
+      : slots
+
+    return filtered.sort()
   }, [doctorAvailability, formState.appointmentDate, formState.doctorId, doctorAppointments])
 
   const events = useMemo(

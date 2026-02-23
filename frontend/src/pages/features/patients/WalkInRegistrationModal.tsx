@@ -14,17 +14,70 @@ const patientStates = [
   { label: 'Admitted', value: 'ADMITTED' },
 ]
 
+// Country code and expected local digit count (for phone validation/formatting)
+const PHONE_COUNTRIES: { code: string; digits: number }[] = [
+  { code: '+92', digits: 10 },  // Pakistan
+  { code: '+1', digits: 10 },
+  { code: '+44', digits: 10 },
+  { code: '+91', digits: 10 },
+  { code: '+971', digits: 9 },
+  { code: '+966', digits: 9 },
+  { code: '+20', digits: 10 },
+  { code: '+90', digits: 10 },
+  { code: '+86', digits: 11 },
+  { code: '+49', digits: 10 },
+  { code: '+33', digits: 9 },
+  { code: '+39', digits: 10 },
+  { code: '+81', digits: 10 },
+  { code: '+61', digits: 9 },
+  { code: '+55', digits: 11 },
+  { code: '+234', digits: 10 },
+  { code: '+27', digits: 9 },
+]
+
 export function WalkInRegistrationModal({ open, onClose }: WalkInRegistrationModalProps) {
   const queryClient = useQueryClient()
   const fieldClass =
     'w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-black focus:border-black text-black bg-white transition-colors'
   
   const labelClass = 'block text-sm font-bold text-black mb-1.5'
+
+  const getPhoneDigits = (code: string) => PHONE_COUNTRIES.find((c) => c.code === code)?.digits ?? 10
+  const formatPhoneLocal = (v: string) => {
+    const d = v.replace(/\D/g, '')
+    const len = getPhoneDigits(phoneCountryCode)
+    const digits = d.slice(0, len)
+    if (digits.length <= 3) return digits
+    return `${digits.slice(0, 3)}-${digits.slice(3)}`
+  }
+  const validatePhone = (code: string, localDigits: string) => {
+    if (!localDigits.trim()) return ''
+    const digits = localDigits.replace(/\D/g, '')
+    const required = getPhoneDigits(code)
+    if (digits.length !== required) return `Enter ${required} digits (without country code)`
+    return ''
+  }
+  const formatCnic = (v: string) => {
+    const digits = v.replace(/\D/g, '').slice(0, 13)
+    if (digits.length <= 5) return digits
+    if (digits.length <= 12) return `${digits.slice(0, 5)}-${digits.slice(5)}`
+    return `${digits.slice(0, 5)}-${digits.slice(5, 12)}-${digits.slice(12)}`
+  }
+  const validateCnic = (v: string) => {
+    if (!v.trim()) return ''
+    const cleaned = v.replace(/\D/g, '')
+    if (cleaned.length !== 13) return 'CNIC must be 13 digits (format: xxxxx-xxxxxxx-x)'
+    return ''
+  }
+
   const [showPrintReceipt, setShowPrintReceipt] = useState(false)
   const [registrationData, setRegistrationData] = useState<any>(null)
   const [patientType, setPatientType] = useState<'new' | 'old' | null>(null) // null = not selected yet
   const [existingPatient, setExistingPatient] = useState<any>(null)
   const [isSearchingPatient, setIsSearchingPatient] = useState(false)
+  const [appointmentSlotError, setAppointmentSlotError] = useState<string | null>(null)
+  const [phoneCountryCode, setPhoneCountryCode] = useState('+92')
+  const [userFieldErrors, setUserFieldErrors] = useState<{ phone?: string; cnic?: string }>({})
   const [formState, setFormState] = useState({
     user: {
       firstName: '',
@@ -247,8 +300,21 @@ export function WalkInRegistrationModal({ open, onClose }: WalkInRegistrationMod
         }
       }
     })
-    
-    return slots.sort()
+
+    // When selected date is today, only show slots in the future
+    const now = new Date()
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+    const selectedDateStr = formState.appointment.appointmentDate || ''
+    const isToday = selectedDateStr === todayStr
+    const currentMins = now.getHours() * 60 + now.getMinutes()
+    const filtered = isToday
+      ? slots.filter((slot) => {
+          const [h, m] = slot.split(':').map(Number)
+          return h * 60 + m > currentMins
+        })
+      : slots
+
+    return filtered.sort()
   }, [doctorAvailability, formState.appointment.appointmentDate, formState.appointment.doctorId, doctorAppointments])
 
   // Reset form when modal closes - MUST be with all hooks at top
@@ -256,6 +322,9 @@ export function WalkInRegistrationModal({ open, onClose }: WalkInRegistrationMod
     if (!open) {
       setPatientType(null)
       setExistingPatient(null)
+      setAppointmentSlotError(null)
+      setUserFieldErrors({})
+      setPhoneCountryCode('+92')
       setShowPrintReceipt(false)
       setRegistrationData(null)
       setFormState({
@@ -301,26 +370,48 @@ export function WalkInRegistrationModal({ open, onClose }: WalkInRegistrationMod
 
   // Function to search for existing patient
   const searchExistingPatient = async () => {
-    if (!formState.user.email && !formState.user.phone) {
+    const fullPhone = formState.user.phone ? phoneCountryCode + formState.user.phone.replace(/\D/g, '') : ''
+    if (!formState.user.email && !fullPhone) {
       toast.error('Please enter email or phone to search for existing patient')
       return
     }
 
     setIsSearchingPatient(true)
     try {
-      // Search patients by email or phone
-      const searchTerm = formState.user.email || formState.user.phone
+      const searchTerm = formState.user.email || fullPhone
       const patients = await patientsApi.getAll(searchTerm)
-      
-      // Find exact match by email or phone
-      const found = patients?.find((p: any) => 
+      const found = patients?.find((p: any) =>
         p.user?.email?.toLowerCase() === formState.user.email?.toLowerCase() ||
-        p.user?.phone === formState.user.phone
+        (p.user?.phone && p.user.phone.replace(/\D/g, '') === fullPhone.replace(/\D/g, ''))
       )
 
       if (found) {
         setExistingPatient(found)
-        // Pre-fill form with existing patient data
+        let phoneLocal = (found.user?.phone || '').replace(/\D/g, '')
+        let code = '+92'
+        const sorted = [...PHONE_COUNTRIES].sort((a, b) => b.code.length - a.code.length)
+        const fullPhone = found.user?.phone || ''
+        if (fullPhone.startsWith('+')) {
+          const match = sorted.find((c) => fullPhone.startsWith(c.code))
+          if (match) {
+            code = match.code
+            phoneLocal = fullPhone.slice(match.code.length).replace(/\D/g, '').slice(0, match.digits)
+          }
+        } else if (phoneLocal.length >= 10 && phoneLocal.startsWith('92')) {
+          code = '+92'
+          phoneLocal = phoneLocal.slice(2).slice(0, 10)
+        } else {
+          phoneLocal = phoneLocal.slice(0, 10)
+        }
+        setPhoneCountryCode(code)
+        const cnicRaw = found.user?.cnic ?? found.cnic
+        const dobRaw = found.dateOfBirth ?? found.user?.dateOfBirth
+        const rawGender = found.gender || found.user?.gender
+        let genderVal = ''
+        if (rawGender) {
+          const s = String(rawGender).toLowerCase()
+          genderVal = s === 'male' ? 'Male' : s === 'female' ? 'Female' : s === 'other' ? 'Other' : String(rawGender).trim()
+        }
         setFormState(prev => ({
           ...prev,
           user: {
@@ -328,14 +419,14 @@ export function WalkInRegistrationModal({ open, onClose }: WalkInRegistrationMod
             firstName: found.user?.firstName || prev.user.firstName,
             lastName: found.user?.lastName || prev.user.lastName,
             email: found.user?.email || prev.user.email,
-            phone: found.user?.phone || prev.user.phone,
-            cnic: found.user?.cnic || prev.user.cnic,
+            phone: phoneLocal,
+            cnic: cnicRaw ? formatCnic(String(cnicRaw)) : prev.user.cnic,
             password: '', // Don't fill password for old patients
           },
           patient: {
             ...prev.patient,
-            gender: found.gender || prev.patient.gender,
-            dateOfBirth: found.dateOfBirth ? new Date(found.dateOfBirth).toISOString().split('T')[0] : prev.patient.dateOfBirth,
+            gender: genderVal || prev.patient.gender,
+            dateOfBirth: dobRaw ? new Date(dobRaw).toISOString().split('T')[0] : prev.patient.dateOfBirth,
             bloodGroup: found.bloodGroup || prev.patient.bloodGroup,
             allergies: found.allergies || prev.patient.allergies,
             medicalHistory: found.medicalHistory || prev.patient.medicalHistory,
@@ -356,14 +447,52 @@ export function WalkInRegistrationModal({ open, onClose }: WalkInRegistrationMod
     }
   }
 
+  // Normalize time to "HH:mm" for same-slot comparison (match backend logic)
+  const normalizeTime = (t: string) => {
+    if (!t || !String(t).trim()) return ''
+    const parts = String(t).trim().split(':')
+    const h = parts[0] ? parts[0].padStart(2, '0') : '00'
+    const m = parts[1] ? parts[1].padStart(2, '0') : '00'
+    return `${h}:${m}`
+  }
+
   const mutation = useMutation({
     mutationFn: async () => {
+      setAppointmentSlotError(null)
+      const phoneErr = validatePhone(phoneCountryCode, formState.user.phone)
+      const cnicErr = validateCnic(formState.user.cnic)
+      setUserFieldErrors({ phone: phoneErr || undefined, cnic: cnicErr || undefined })
+      if (phoneErr || cnicErr) {
+        if (phoneErr) toast.error(phoneErr)
+        if (cnicErr) toast.error(cnicErr)
+        throw new Error(phoneErr || cnicErr)
+      }
       // Validate required fields
       if (patientType === 'new' && !formState.user.password) {
         throw new Error('Password is required for new patients')
       }
       if (patientType === 'old' && !existingPatient) {
         throw new Error('Please search and select an existing patient first')
+      }
+
+      // Same-slot validation for existing patient: cannot book another appointment at same date+time
+      if (patientType === 'old' && existingPatient && formState.appointment.enabled && formState.appointment.doctorId && formState.appointment.appointmentDate && formState.appointment.appointmentTime) {
+        const allAppointments = await appointmentsApi.getAll({ patientId: existingPatient.userId })
+        const selectedDate = new Date(formState.appointment.appointmentDate)
+        selectedDate.setHours(0, 0, 0, 0)
+        const requestedTime = normalizeTime(formState.appointment.appointmentTime)
+        const hasSameSlot = (allAppointments || []).some((apt: any) => {
+          if (apt.status === 'CANCELLED') return false
+          const aptDate = new Date(apt.appointmentDate)
+          aptDate.setHours(0, 0, 0, 0)
+          if (aptDate.getTime() !== selectedDate.getTime()) return false
+          return normalizeTime(apt.appointmentTime || '') === requestedTime
+        })
+        if (hasSameSlot) {
+          const msg = 'You already have an appointment at this slot.'
+          setAppointmentSlotError(msg)
+          throw new Error(msg)
+        }
       }
 
       // For old patients, use existing patient ID, don't create new user
@@ -395,7 +524,7 @@ export function WalkInRegistrationModal({ open, onClose }: WalkInRegistrationMod
           if (formState.patient.medicalHistory) notesParts.push(`Medical History: ${formState.patient.medicalHistory}`)
           if (formState.patient.allergies) notesParts.push(`Allergies: ${formState.patient.allergies}`)
           if (formState.patient.bloodGroup) notesParts.push(`Blood Group: ${formState.patient.bloodGroup}`)
-          if (formState.user.phone) notesParts.push(`Phone: ${formState.user.phone}`)
+          if (formState.user.phone) notesParts.push(`Phone: ${phoneCountryCode}${formState.user.phone.replace(/\D/g, '')}`)
           if (formState.user.cnic) notesParts.push(`CNIC: ${formState.user.cnic}`)
 
           createdAppointment = await appointmentsApi.create({
@@ -512,8 +641,8 @@ export function WalkInRegistrationModal({ open, onClose }: WalkInRegistrationMod
         lastName: formState.user.lastName.trim(),
         email: formState.user.email.trim(),
         password: formState.user.password, // Required for new patients
-        phone: formState.user.phone?.trim() || null,
-        cnic: formState.user.cnic?.trim() || null,
+        phone: formState.user.phone ? phoneCountryCode + formState.user.phone.replace(/\D/g, '') : null,
+        cnic: formState.user.cnic ? formState.user.cnic.replace(/\D/g, '').trim() || null : null,
       }
 
       // Clean and prepare patient data
@@ -548,7 +677,7 @@ export function WalkInRegistrationModal({ open, onClose }: WalkInRegistrationMod
           notesParts.push(`Blood Group: ${formState.patient.bloodGroup}`)
         }
         if (formState.user.phone) {
-          notesParts.push(`Phone: ${formState.user.phone}`)
+          notesParts.push(`Phone: ${phoneCountryCode}${formState.user.phone.replace(/\D/g, '')}`)
         }
         if (formState.user.cnic) {
           notesParts.push(`CNIC: ${formState.user.cnic}`)
@@ -696,8 +825,13 @@ export function WalkInRegistrationModal({ open, onClose }: WalkInRegistrationMod
     },
     onError: (error: any) => {
       console.error('Registration error:', error)
-      const errorMessage = error?.response?.data?.message || error?.response?.data?.error || error?.message || 'Unable to create patient'
-      toast.error(errorMessage)
+      let errorMessage = error?.response?.data?.message ?? error?.response?.data?.error ?? error?.message ?? 'Unable to create patient'
+      if (Array.isArray(errorMessage)) errorMessage = errorMessage.join(', ')
+      const msg = String(errorMessage)
+      if (msg.toLowerCase().includes('already have an appointment at this slot')) {
+        setAppointmentSlotError('You already have an appointment at this slot.')
+      }
+      toast.error(msg)
     },
   })
 
@@ -706,6 +840,7 @@ export function WalkInRegistrationModal({ open, onClose }: WalkInRegistrationMod
     key: string,
     value: any,
   ) => {
+    if (section === 'appointment') setAppointmentSlotError(null)
     setFormState((prev) => ({
       ...prev,
       [section]: {
@@ -784,13 +919,29 @@ export function WalkInRegistrationModal({ open, onClose }: WalkInRegistrationMod
                     onChange={(e) => updateForm('user', 'email', e.target.value)}
                     autoComplete="email"
                   />
-                  <input
-                    placeholder="Phone"
-                    className={fieldClass}
-                    value={formState.user.phone}
-                    onChange={(e) => updateForm('user', 'phone', e.target.value)}
-                    autoComplete="tel"
-                  />
+                  <div className="flex gap-2 min-w-0">
+                    <select
+                      className={`${fieldClass} shrink-0 !min-w-[5rem] !w-[5rem]`}
+                      value={phoneCountryCode}
+                      onChange={(e) => setPhoneCountryCode(e.target.value)}
+                    >
+                      {PHONE_COUNTRIES.map((c) => (
+                        <option key={c.code} value={c.code}>{c.code}</option>
+                      ))}
+                    </select>
+                    <input
+                      type="tel"
+                      inputMode="numeric"
+                      placeholder={`Phone (${getPhoneDigits(phoneCountryCode)} digits)`}
+                      className={`${fieldClass} flex-1 min-w-0`}
+                      value={formatPhoneLocal(formState.user.phone)}
+                      onChange={(e) => {
+                        const digits = e.target.value.replace(/\D/g, '').slice(0, getPhoneDigits(phoneCountryCode))
+                        updateForm('user', 'phone', digits)
+                      }}
+                      autoComplete="tel"
+                    />
+                  </div>
                 </div>
                 <div className="flex space-x-3">
                   <button
@@ -873,21 +1024,59 @@ export function WalkInRegistrationModal({ open, onClose }: WalkInRegistrationMod
                 autoComplete="email"
                 disabled={!!existingPatient}
               />
-              <input
-                placeholder="Phone"
-                className={fieldClass}
-                value={formState.user.phone}
-                onChange={(e) => updateForm('user', 'phone', e.target.value)}
-                autoComplete="tel"
-                disabled={!!existingPatient}
-              />
-              <input
-                placeholder="CNIC"
-                className={fieldClass}
-                value={formState.user.cnic}
-                onChange={(e) => updateForm('user', 'cnic', e.target.value)}
-                autoComplete="off"
-              />
+              <div className="min-w-0">
+                <label className={labelClass}>Phone</label>
+                <div className="flex gap-2 min-w-0">
+                  <select
+                    className={`${fieldClass} shrink-0 !min-w-[5rem] !w-[5rem] ${userFieldErrors.phone ? 'border-red-500' : ''}`}
+                    value={phoneCountryCode}
+                    onChange={(e) => {
+                      setPhoneCountryCode(e.target.value)
+                      setUserFieldErrors((p) => ({ ...p, phone: validatePhone(e.target.value, formState.user.phone) }))
+                    }}
+                    disabled={!!existingPatient}
+                  >
+                    {PHONE_COUNTRIES.map((c) => (
+                      <option key={c.code} value={c.code}>{c.code}</option>
+                    ))}
+                  </select>
+                  <input
+                    type="tel"
+                    inputMode="numeric"
+                    placeholder={`e.g. 300-1234567 (${getPhoneDigits(phoneCountryCode)} digits)`}
+                    className={`${fieldClass} flex-1 min-w-0 ${userFieldErrors.phone ? 'border-red-500' : ''}`}
+                    value={formatPhoneLocal(formState.user.phone)}
+                    onChange={(e) => {
+                      const digits = e.target.value.replace(/\D/g, '').slice(0, getPhoneDigits(phoneCountryCode))
+                      updateForm('user', 'phone', digits)
+                      setUserFieldErrors((p) => ({ ...p, phone: validatePhone(phoneCountryCode, digits) }))
+                    }}
+                    onBlur={() => setUserFieldErrors((p) => ({ ...p, phone: validatePhone(phoneCountryCode, formState.user.phone) }))}
+                    disabled={!!existingPatient}
+                    autoComplete="tel"
+                  />
+                </div>
+                {userFieldErrors.phone && <p className="text-sm text-red-600 mt-1">{userFieldErrors.phone}</p>}
+              </div>
+              <div>
+                <label className={labelClass}>CNIC</label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="xxxxx-xxxxxxx-x"
+                  maxLength={15}
+                  className={`${fieldClass} ${userFieldErrors.cnic ? 'border-red-500' : ''}`}
+                  value={formState.user.cnic}
+                  onChange={(e) => {
+                    const formatted = formatCnic(e.target.value)
+                    updateForm('user', 'cnic', formatted)
+                    setUserFieldErrors((p) => ({ ...p, cnic: validateCnic(formatted) }))
+                  }}
+                  onBlur={() => setUserFieldErrors((p) => ({ ...p, cnic: validateCnic(formState.user.cnic) }))}
+                  autoComplete="off"
+                />
+                {userFieldErrors.cnic && <p className="text-sm text-red-600 mt-1">{userFieldErrors.cnic}</p>}
+              </div>
               {/* Password field - Only for new patients */}
               {patientType === 'new' && (
                 <input
@@ -961,6 +1150,11 @@ export function WalkInRegistrationModal({ open, onClose }: WalkInRegistrationMod
               </label>
             </div>
 
+            {appointmentSlotError && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm font-medium">
+                {appointmentSlotError}
+              </div>
+            )}
             {formState.appointment.enabled && (
               <div className="space-y-4 bg-gray-50 p-4 rounded-lg">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

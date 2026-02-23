@@ -1,11 +1,31 @@
-import { Pill, Calendar, Printer, AlertCircle } from 'lucide-react'
+import { useState } from 'react'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { Pill, Calendar, Printer, AlertCircle, Trash2 } from 'lucide-react'
 import { format } from 'date-fns'
+import toast from 'react-hot-toast'
+import { prescriptionsApi } from '../../../../services/api'
 
 interface PrescriptionsViewProps {
   prescriptions: any[]
 }
 
 export default function PrescriptionsView({ prescriptions }: PrescriptionsViewProps) {
+  const queryClient = useQueryClient()
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => prescriptionsApi.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['prescriptions'] })
+      toast.success('Prescription deleted')
+      setDeletingId(null)
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.message || 'Failed to delete prescription')
+      setDeletingId(null)
+    },
+  })
+
   const activePrescriptions = prescriptions?.filter((pres: any) => {
     if (!pres.validUntil) return true
     return new Date(pres.validUntil) >= new Date()
@@ -18,6 +38,12 @@ export default function PrescriptionsView({ prescriptions }: PrescriptionsViewPr
 
   const handlePrint = (pres: any) => {
     window.print()
+  }
+
+  const handleDelete = (pres: any) => {
+    if (!window.confirm('Are you sure you want to delete this prescription?')) return
+    setDeletingId(pres.id)
+    deleteMutation.mutate(pres.id)
   }
 
   return (
@@ -79,13 +105,24 @@ export default function PrescriptionsView({ prescriptions }: PrescriptionsViewPr
                         </div>
                       )}
                     </div>
-                    <button
-                      onClick={() => handlePrint(pres)}
-                      className="flex items-center px-3 py-2 bg-black text-white rounded-lg hover:bg-gray-900 text-sm ml-4"
-                    >
-                      <Printer className="h-4 w-4 mr-2" />
-                      Print
-                    </button>
+                    <div className="flex items-center gap-2 ml-4">
+                      <button
+                        onClick={() => handlePrint(pres)}
+                        className="flex items-center px-3 py-2 bg-black text-white rounded-lg hover:bg-gray-900 text-sm"
+                      >
+                        <Printer className="h-4 w-4 mr-2" />
+                        Print
+                      </button>
+                      <button
+                        onClick={() => handleDelete(pres)}
+                        disabled={deletingId === pres.id}
+                        className="flex items-center px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm disabled:opacity-50"
+                        title="Delete prescription"
+                      >
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Delete
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))
@@ -136,13 +173,24 @@ export default function PrescriptionsView({ prescriptions }: PrescriptionsViewPr
                         </div>
                       )}
                     </div>
-                    <button
-                      onClick={() => handlePrint(pres)}
-                      className="flex items-center px-3 py-2 bg-black text-white rounded-lg hover:bg-gray-900 text-sm ml-4"
-                    >
-                      <Printer className="h-4 w-4 mr-2" />
-                      Print
-                    </button>
+                    <div className="flex items-center gap-2 ml-4">
+                      <button
+                        onClick={() => handlePrint(pres)}
+                        className="flex items-center px-3 py-2 bg-black text-white rounded-lg hover:bg-gray-900 text-sm"
+                      >
+                        <Printer className="h-4 w-4 mr-2" />
+                        Print
+                      </button>
+                      <button
+                        onClick={() => handleDelete(pres)}
+                        disabled={deletingId === pres.id}
+                        className="flex items-center px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm disabled:opacity-50"
+                        title="Delete prescription"
+                      >
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Delete
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))

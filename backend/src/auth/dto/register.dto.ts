@@ -25,6 +25,20 @@ export class RegisterDto {
   @IsString()
   phone?: string;
 
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  gender?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  cnic?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  dateOfBirth?: string;
+
   @ApiProperty({ enum: UserRole, example: UserRole.PATIENT })
   @IsEnum(UserRole)
   role: UserRole;

@@ -145,16 +145,20 @@ export default function Login() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-white py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
-        <div className="text-center">
-          <div className="mx-auto h-16 w-16 bg-black rounded-full flex items-center justify-center mb-4">
-            <span className="text-white text-2xl font-bold">IHIS</span>
+        <div className="text-center space-y-4">
+          <Link to="/" className="inline-flex items-center space-x-3 group justify-center">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-black text-white shadow-md group-hover:bg-gray-900 transition-colors">
+              <span className="text-xl font-extrabold tracking-tight">IHIS</span>
+            </div>
+            <div className="flex flex-col items-start">
+              <span className="text-xs font-semibold text-gray-900 tracking-widest uppercase">Hospital Information System</span>
+              <span className="text-[11px] text-gray-500">Secure multi-role portal</span>
+            </div>
+          </Link>
+          <div>
+            <h2 className="text-3xl font-extrabold text-black">Welcome Back</h2>
+            <p className="mt-2 text-sm text-gray-600">Sign in to your account</p>
           </div>
-          <h2 className="text-3xl font-extrabold text-black">
-            Welcome Back
-          </h2>
-          <p className="mt-2 text-sm text-gray-600">
-            Sign in to your account
-          </p>
         </div>
         <div className="bg-white rounded-xl shadow-xl p-8 border-2 border-black">
           {isApproved && (
